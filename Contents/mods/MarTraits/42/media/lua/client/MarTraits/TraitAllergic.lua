@@ -722,6 +722,7 @@ local function allergicSneezeUpdate()
 				function()
 					print("Disable allergy sneeze!")
 					player:getBodyDamage():setSneezeCoughActive(0) --Disable sneezing
+				end
 				, 0.3)
 
 		else

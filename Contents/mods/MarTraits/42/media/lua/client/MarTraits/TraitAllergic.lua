@@ -6,7 +6,7 @@ end
 
 MarTraits = MarTraits or {}
 
--- TODO: add an increase spike of sneeze chance when rummaging through containers in a heavily "dusty" room
+-- TODO: add an increase spike of sneeze chance when rummaging through a heavily "dusty" room
 -- TODO: change dust calculation to be stronger based on how much relative dust in room compared to how many squares, rather than dust in all squares total?
 -- TODO: add an absolute smidgen of an effect for dust allergies when you have obscenely dirty clothes, shouldn't be hard.
 
@@ -14,7 +14,7 @@ MarTraits = MarTraits or {}
 local baseSneezeCountdown = 150 -- Counter to reset to on sneeze
 local sneezeTimeMultiplier = 1.0 -- Modified by traits like Prone to Illness
 local allergyRate = 0.02 --Multiplier on how fast allergy moodles move up and down
-local baseAllergyRecoveryRate = 0.3 -- How quickly allergies should recover per minute
+local baseAllergyRecoveryRate = 0.4 -- How quickly allergies should recover per minute
 local proportionalAllergyRecoveryRate = 10.0 -- At max allergy, the base rate is multiplied by this number to return to "normal"
 local seasonDelta = 0.0 -- Tracks the effect of seasons outside of the season update.
 local sneezeSoundRange = 30 --Default range
@@ -41,7 +41,6 @@ local rummageDustSquareSpikeMod = -5 -- How much influence each 1 dust the squar
 local player = nil
 local validItemTypes = {} -- A list of valid body slots for pollen tracked items to exist in
 
-local allergySneezeActiveTicks = 10
 local countChangeMoodleMax = 15 -- how much count change is needed for the moodle be maxed out.
 
 local countGradualChange = 0.00
@@ -52,7 +51,6 @@ local countChangeGradualMoodleActivateThreshold = 2 -- how much count change is 
 
 MarTraits.allergiesMoodleActive = false
 MarTraits.allergiesMoodleSavedValue = 0
-
 
 local function allergicOnCreatePlayer(playerIndex, createdPlayer) --Load data on player creation
 	player = createdPlayer
@@ -326,7 +324,7 @@ MarTraits.clothesUpdated = function(player)
 end
 Events.OnClothingUpdated.Add(MarTraits.clothesUpdated)
 
-MarTraits.updateClothesTotalPollenDirt = function()
+MarTraits.updateClothesTotalPollen = function()
 	if player == nil then 
 		player = getPlayer()
 	end
@@ -335,7 +333,6 @@ MarTraits.updateClothesTotalPollenDirt = function()
 	local items = player:getWornItems()
 	local size = items:size() - 1
 	totalPollen = 0
-	totalDirt = 0
 
 	for c=0,size do
 		local item = items:getItemByIndex(c)
@@ -351,7 +348,7 @@ MarTraits.updateClothesTotalPollenDirt = function()
 		end
 	end
 end
-Events.EveryTenMinutes.Add(MarTraits.updateClothesTotalPollenDirt)
+Events.EveryTenMinutes.Add(MarTraits.updateClothesTotalPollen)
 
 local dustSquareMax = 4
 MarTraits.sumDustInSquare = function(gridSquare)
@@ -424,7 +421,7 @@ MarTraits.allergyDustInRoom = function(player, roomDef)
 	--print("--== Dust Room Debugger ==--")
 
 	local dustSum = 0
-
+	
     --print("There are ",roomSquares:size()," squares in this room.")
 
 	roomSquareSize = roomSquares:size()
@@ -518,19 +515,6 @@ end
 Events.EveryOneMinute.Add(MarTraits.treePollenClothesUpdate)
 
 
-local function disableAllergySneeze()
-	if allergySneezeActiveTicks > 0 then
-		allergySneezeActiveTicks = allergySneezeActiveTicks - 1
-	elseif allergySneezeActiveTicks == 0 then --Makes sure we don't disable a non-allergic sneeze.
-		allergySneezeActiveTicks = -1
-		print("Disable allergy sneeze!")
-		player:getBodyDamage():setSneezeCoughActive(0) --Disable sneezing
-	end
-end
-Events.OnTick.Add(disableAllergySneeze)
-
-
-
 MarTraits.updateAllergicTraitMoodleData = function(player)
 	local moodle = nil
 	if MarTraits.moodleFrameworkActive then
@@ -540,7 +524,6 @@ MarTraits.updateAllergicTraitMoodleData = function(player)
 	print("Count gradual change of " .. countGradualChange)
 	print("Count spike change of " .. countSpikeChange)
 	-- Based off the levels of requirement for count change, but with spike removed.
-
 	MarTraits.allergiesMoodleSavedValue = PZMath.lerp(MarTraits.moodleAllergiesGood1, 0, -countGradualChange/(countChangeGradualMoodleActivateThreshold*5)) -- 5, because 5 moodle levels.
 	-- If moodle should show because of a spike, such as with trees, bump it to do so, since want to communicate that, and allow for SNEEZES.
 	if countSpikeChange < countSpikeMoodleActivateThreshold then
@@ -548,7 +531,6 @@ MarTraits.updateAllergicTraitMoodleData = function(player)
 	end
 
 	MarTraits.allergiesMoodleSavedValue = PZMath.clamp(MarTraits.allergiesMoodleSavedValue, 0, MarTraits.moodleAllergiesGood1 - 0.05)
-
 
 	print("Moodle Value = " .. MarTraits.allergiesMoodleSavedValue)
 
@@ -588,7 +570,6 @@ local function allergicSneezeUpdate()
 	local hasDustAllergies = player:HasTrait("Mar_DustAllergic")
 
 	if hasSeasonalAllergies or hasDustAllergies then
-
 		countGradualChange = 0.0 --Reset gradual change at start.
 
 		if hasSeasonalAllergies then
@@ -646,9 +627,7 @@ local function allergicSneezeUpdate()
 			end
 
 			countSpikeChange = countSpikeChange + addedSpikeChange
-
 			countGradualChange = countGradualChange + addedGradualChange
-
 		end
 
 		if hasDustAllergies then
@@ -692,12 +671,11 @@ local function allergicSneezeUpdate()
 		-- Reset count for sneeze since we use it.
 		countSpikeChange = 0.0
 
-
 		if MarTraits.getSneezeCountdown(player) <= 0 then
 			if not MarTraits.allergiesMoodleActive then --After we checked sneezeCountdown <= 0
 				return --Abort if no moodle is showing!
 			end
-			allergySneezeActiveTicks = 10
+			
 			-- Do a wiggle with the sneeze, thematics!
 			local moodle = MF.getMoodle("Allergies", player:getPlayerNum())
 			if moodle then
@@ -739,6 +717,12 @@ local function allergicSneezeUpdate()
 				player:getBodyDamage():setSneezeCoughActive(1)
 				addSound(player, player:getX(), player:getY(), player:getZ(), range, volume);
 			end
+
+			MarLibrary.delayFuncByDelta(
+				function()
+					print("Disable allergy sneeze!")
+					player:getBodyDamage():setSneezeCoughActive(0) --Disable sneezing
+				, 0.3)
 
 		else
 			--Run "buildup" code, to give player some warning of sneeze

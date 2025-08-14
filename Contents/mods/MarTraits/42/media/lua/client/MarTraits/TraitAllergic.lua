@@ -6,7 +6,7 @@ end
 
 MarTraits = MarTraits or {}
 
--- TODO: add an increase spike of sneeze chance when rummaging through a heavily "dusty" room
+-- TODO: add an increase spike of sneeze chance when rummaging through containers in a heavily "dusty" room
 -- TODO: change dust calculation to be stronger based on how much relative dust in room compared to how many squares, rather than dust in all squares total?
 -- TODO: add an absolute smidgen of an effect for dust allergies when you have obscenely dirty clothes, shouldn't be hard.
 
@@ -30,7 +30,7 @@ local dustRoom = 0.0
 local dustSquare = 0.0
 
 local roomSquareSize = 0
-local dustRoomMod = -0.15 --Amount to subtract from dust allergy moodle per dust in room
+local dustRoomMod = -0.15 --Amount to subtract from dust allergy moodle relative to ratio of dust in room to size of room.
 local dustSquareMod = -3.0 --Amount to subtract from dust moodle per dust near player
 local dustRoomRatio = 0
 

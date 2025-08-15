@@ -46,7 +46,7 @@ local countChangeMoodleMax = 15 -- how much count change is needed for the moodl
 local countGradualChange = 0.00
 local countSpikeChange = 0.00 -- Used for instances where we want the count to go down alot, like walking through trees, seperates it from moodle.
 
-local countSpikeMoodleActivateThreshold = 0.0
+local countSpikeMoodleActivateThreshold = -1
 local countChangeGradualMoodleActivateThreshold = 2 -- how much count change is needed for the moodle to consider showing. 
 
 MarTraits.allergiesMoodleActive = false
@@ -441,9 +441,11 @@ MarTraits.allergyDustInRoom = function(player, roomDef)
             end
             for squareY = y-5, y+5 do
                 local square = getCell():getGridSquare(squareX,squareY,z)
-                if playerSquare:getRoomID() == square:getRoomID() then
-                    dustSum = dustSum + MarTraits.sumDustInSquare(square)
-                end
+				if square != nil then
+                	if playerSquare:getRoomID() == square:getRoomID() then
+                    	dustSum = dustSum + MarTraits.sumDustInSquare(square)
+                	end
+				end
             end
         end
     else
@@ -524,13 +526,13 @@ MarTraits.updateAllergicTraitMoodleData = function(player)
 	print("Count gradual change of " .. countGradualChange)
 	print("Count spike change of " .. countSpikeChange)
 	-- Based off the levels of requirement for count change, but with spike removed.
-	MarTraits.allergiesMoodleSavedValue = PZMath.lerp(MarTraits.moodleAllergiesGood1, 0, -countGradualChange/(countChangeGradualMoodleActivateThreshold*5)) -- 5, because 5 moodle levels.
+	MarTraits.allergiesMoodleSavedValue = PZMath.lerp(1, 0, -countGradualChange/(countChangeGradualMoodleActivateThreshold*5)) -- 5, because 5 moodle levels.
 	-- If moodle should show because of a spike, such as with trees, bump it to do so, since want to communicate that, and allow for SNEEZES.
 	if countSpikeChange < countSpikeMoodleActivateThreshold then
-		MarTraits.allergiesMoodleSavedValue = MarTraits.allergiesMoodleSavedValue - (MarTraits.moodleStepAmount * 2) - 0.01 -- 0.01 so it beats threshold.
+		MarTraits.allergiesMoodleSavedValue = MarTraits.allergiesMoodleSavedValue - (MarTraits.moodleStepAmount) - 0.01 -- 0.01 so it beats threshold.
 	end
 
-	MarTraits.allergiesMoodleSavedValue = PZMath.clamp(MarTraits.allergiesMoodleSavedValue, 0, MarTraits.moodleAllergiesGood1 - 0.05)
+	MarTraits.allergiesMoodleSavedValue = PZMath.clamp(MarTraits.allergiesMoodleSavedValue, 0, 1)
 
 	print("Moodle Value = " .. MarTraits.allergiesMoodleSavedValue)
 
@@ -663,19 +665,19 @@ local function allergicSneezeUpdate()
 			countGradualChange = countGradualChange + addedGradualChange
 		end
 
-		-- Add together the thingies for sneeze countdown.
-		MarTraits.setSneezeCountdown(player, MarTraits.getSneezeCountdown(player) + countGradualChange + countSpikeChange)
-		print("Sneeze Countdown: ",MarTraits.getSneezeCountdown(player))
-
 		MarTraits.updateAllergicTraitMoodleData(player)
 		-- Reset count for sneeze since we use it.
 		countSpikeChange = 0.0
 
+		if not MarTraits.allergiesMoodleActive then --After we checked sneezeCountdown <= 0
+			return --Abort if no moodle is showing!
+		end
+
+		-- Add together the thingies for sneeze countdown.
+		MarTraits.setSneezeCountdown(player, MarTraits.getSneezeCountdown(player) + countGradualChange + countSpikeChange)
+		print("Sneeze Countdown: ",MarTraits.getSneezeCountdown(player))
+
 		if MarTraits.getSneezeCountdown(player) <= 0 then
-			if not MarTraits.allergiesMoodleActive then --After we checked sneezeCountdown <= 0
-				return --Abort if no moodle is showing!
-			end
-			
 			-- Do a wiggle with the sneeze, thematics!
 			local moodle = MF.getMoodle("Allergies", player:getPlayerNum())
 			if moodle then
@@ -729,7 +731,7 @@ local function allergicSneezeUpdate()
 			--Run "buildup" code, to give player some warning of sneeze
 			if countGradualChange + countSpikeChange < 0 then
 				local updatesToSneeze = PZMath.abs(MarTraits.getSneezeCountdown(player) / (countGradualChange + countSpikeChange))
-				local buildupChance = PZMath.lerp(100, 0, (updatesToSneeze-1) / 10) --Scale from 100% chance at 1, to 5% chance at 6 updates
+				local buildupChance = PZMath.lerp(75, 15, (updatesToSneeze-1) / 6) --Scale chance, depending on updates remaining
 				print("Updates to sneeze : ",updatesToSneeze," Buildup Chance : ",buildupChance)
 				if ZombRand(100) <= buildupChance then
 					if updatesToSneeze < 1 then
@@ -737,7 +739,7 @@ local function allergicSneezeUpdate()
 					elseif updatesToSneeze < 3 then
 						player:Say("Hahh...")
 					else
-						player:SayWhisper("*sniff*")
+						player:Say("*sniff*")
 					end
 				end
 			end
